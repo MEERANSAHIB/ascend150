@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ascend — 150 Day Challenge</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#080B10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ascend">
+<link rel="apple-touch-icon" href="icon-512.png">
+
+<!-- Fonts & Confetti -->
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+<!-- Firebase v9 CDN (compat mode — works in plain HTML) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<style>
+/* ============================================================
+   ROOT & RESET
+============================================================ */
+:root {
+  --bg:      #080B10;
+  --bg2:     #0E1218;
+  --bg3:     #141A24;
+  --card:    #111820;
+  --border:  rgba(255,255,255,0.07);
+  --purple:  #A855F7;
+  --purple2: #7C3AED;
+  --teal:    #2DD4BF;
+  --teal2:   #0D9488;
+  --pink:    #F472B6;
+  --gold:    #FBBF24;
+  --green:   #34D399;
+  --red:     #F87171;
+  --text:    #F0EEF8;
+  --muted:   #6B7280;
+  --muted2:  #374151;
+  --glow-p:  rgba(168,85,247,0.35);
+  --glow-t:  rgba(45,212,191,0.35);
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 10% 10%, rgba(124,58,237,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 90% 90%, rgba(13,148,136,0.10) 0%, transparent 60%);
+  pointer-events: none; z-index: 0;
+}
+
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--purple2); border-radius:99px; }
+
+/* ============================================================
+   LOGIN SCREEN
+============================================================ */
+#loginScreen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 32px 24px;
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+
+.login-logo {
+  font-family: 'Syne', sans-serif;
+  font-size: 3rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--purple), var(--teal));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 8px;
+}
+
+.login-sub {
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 48px;
+}
+
+.login-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 36px 28px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.login-card h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.login-card p {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 28px;
+  line-height: 1.6;
+}
+
+.google-btn {
+  width: 100%;
+  padding: 14px 20px;
+  background: white;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 12px;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.google-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+.google-btn:active { transform: translateY(0); }
+
+.google-icon {
+  width: 20px; height: 20px;
+  flex-shrink: 0;
+}
+
+.login-note {
+  margin-top: 16px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   SYNC STATUS BAR
+============================================================ */
+#syncBar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 200;
+  background: transparent;
+  transition: background 0.3s;
+}
+#syncBar.syncing {
+  background: linear-gradient(90deg, var(--purple), var(--teal), var(--purple));
+  background-size: 200% 100%;
+  animation: syncSlide 1s linear infinite;
+}
+#syncBar.saved { background: var(--green); animation: none; }
+#syncBar.error { background: var(--red); animation: none; }
+
+@keyframes syncSlide {
+  0%   { background-position: 0% 0%; }
+  100% { background-position: 200% 0%; }
+}
+
+/* Sync pill */
+.sync-pill {
+  position: fixed;
+  top: 12px; right: 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 5px 12px;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 201;
+  transition: all 0.3s;
+}
+.sync-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background 0.3s;
+}
+.sync-pill.syncing .sync-dot { background: var(--gold); animation: blink 0.6s infinite; }
+.sync-pill.saved   .sync-dot { background: var(--green); }
+.sync-pill.error   .sync-dot { background: var(--red); }
+.sync-pill .sync-label { color: var(--muted); }
+.sync-pill.saved .sync-label { color: var(--green); }
+.sync-pill.error .sync-label { color: var(--red); }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* User avatar */
+.user-pill {
+  position: fixed;
+  top: 12px; left: 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 4px 12px 4px 4px;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 201;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.user-pill:hover { border-color: rgba(255,255,255,0.15); }
+.user-avatar {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple2), var(--teal2));
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-name { color: var(--text); max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Sign-out tooltip */
+.signout-tip {
+  display: none;
+  position: fixed;
+  top: 44px; left: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  color: var(--red);
+  cursor: pointer;
+  z-index: 202;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.signout-tip:hover { background: rgba(248,113,113,0.1); }
+
+/* ============================================================
+   MAIN APP LAYOUT
+============================================================ */
+#appScreen { display: none; }
+
+.wrapper {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 56px 16px 80px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================================
+   HEADER
+============================================================ */
+.app-header {
+  text-align: center;
+  margin-bottom: 24px;
+  animation: slideDown 0.7s cubic-bezier(0.16,1,0.3,1) both;
+}
+
+.app-logo {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, var(--purple), var(--teal));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.app-tagline { font-size: 0.78rem; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; }
+
+/* ============================================================
+   HERO
+============================================================ */
+.hero {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 22px 20px;
+  margin-bottom: 14px;
+  position: relative;
+  overflow: hidden;
+  animation: slideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.1s both;
+}
+.hero::before {
+  content: '';
+  position: absolute; top:-40px; right:-40px;
+  width:180px; height:180px;
+  background: radial-gradient(circle, var(--glow-p) 0%, transparent 70%);
+  pointer-events:none;
+}
+.hero-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; flex-wrap:wrap; gap:12px; }
+
+.level-badge { display:flex; align-items:center; gap:10px; }
+.level-orb {
+  width:56px; height:56px; border-radius:50%;
+  background: linear-gradient(135deg, var(--purple2), var(--purple));
+  display:flex; align-items:center; justify-content:center; flex-direction:column;
+  box-shadow: 0 0 20px var(--glow-p);
+  font-family:'Syne',sans-serif; font-weight:800;
+  animation: pulse 3s infinite;
+}
+.level-orb .lv-label { font-size:0.5rem; letter-spacing:1px; text-transform:uppercase; opacity:0.8; }
+.level-orb .lv-num   { font-size:1.3rem; line-height:1; }
+.level-info h2 { font-family:'Syne',sans-serif; font-size:1rem; font-weight:700; }
+.level-info .xp-text { font-size:0.78rem; color:var(--muted); margin-top:2px; }
+.level-info .xp-text span { color:var(--purple); font-weight:600; }
+
+.stats-row { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+.stat-pill {
+  background:var(--bg3); border:1px solid var(--border); border-radius:10px;
+  padding:8px 14px; display:flex; align-items:center; gap:7px; flex:1; min-width:90px;
+}
+.stat-pill .pill-icon { font-size:1.1rem; }
+.stat-pill .pill-val  { font-family:'Syne',sans-serif; font-weight:700; font-size:1rem; }
+.stat-pill .pill-lbl  { font-size:0.68rem; color:var(--muted); }
+.streak-pill .pill-val { color:var(--gold); }
+.freeze-pill .pill-val { color:var(--teal); }
+.totalxp-pill .pill-val { color:var(--purple); }
+
+.xp-bar-label { display:flex; justify-content:space-between; font-size:0.72rem; color:var(--muted); margin-bottom:6px; }
+.xp-bar-label span:last-child { color:var(--purple); font-weight:600; }
+.xp-bar-track { height:8px; background:var(--bg3); border-radius:99px; overflow:hidden; }
+.xp-bar-fill {
+  height:100%;
+  background: linear-gradient(90deg, var(--purple2), var(--purple), var(--pink));
+  border-radius:99px;
+  transition: width 0.8s cubic-bezier(0.34,1.56,0.64,1);
+  position:relative;
+}
+.xp-bar-fill::after {
+  content:''; position:absolute; top:0; right:0; bottom:0; width:30px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
+  border-radius:99px; animation:shimmer 1.5s infinite;
+}
+
+/* ============================================================
+   DAY NAV
+============================================================ */
+.day-nav {
+  background:var(--card); border:1px solid var(--border); border-radius:16px;
+  padding:14px 18px; display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:14px; animation:slideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.2s both;
+}
+.day-nav-center { text-align:center; }
+.day-nav-center .day-big { font-family:'Syne',sans-serif; font-size:1.6rem; font-weight:800; color:var(--teal); line-height:1; }
+.day-nav-center .day-sub { font-size:0.72rem; color:var(--muted); margin-top:2px; }
+.nav-arrow {
+  width:38px; height:38px; background:var(--bg3); border:1px solid var(--border);
+  color:var(--teal); border-radius:10px; cursor:pointer; font-size:1.1rem;
+  display:flex; align-items:center; justify-content:center; transition:all 0.2s;
+}
+.nav-arrow:hover { background:rgba(45,212,191,0.1); transform:scale(1.05); }
+
+/* ============================================================
+   GOAL CARDS
+============================================================ */
+.section-label {
+  font-size:0.7rem; font-weight:600; letter-spacing:2.5px; text-transform:uppercase;
+  color:var(--muted); margin:20px 0 10px;
+}
+.goals-grid { display:grid; gap:10px; animation:slideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.3s both; }
+
+.goal-card {
+  background:var(--card); border:1px solid var(--border); border-radius:16px;
+  padding:16px 18px; transition:border-color 0.3s, transform 0.2s; position:relative; overflow:hidden;
+}
+.goal-card:hover { border-color:rgba(255,255,255,0.12); transform:translateY(-1px); }
+.goal-card .accent-line { position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:99px 0 0 99px; }
+
+.goal-row { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.goal-icon-wrap { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; background:rgba(255,255,255,0.04); flex-shrink:0; }
+.goal-meta { flex:1; }
+.goal-meta .g-title { font-family:'Syne',sans-serif; font-size:0.9rem; font-weight:700; }
+.goal-meta .g-xp    { font-size:0.7rem; color:var(--muted); margin-top:1px; }
+
+.goal-input-wrap { display:flex; align-items:center; gap:6px; }
+.goal-input {
+  background:var(--bg3); border:1px solid var(--border); color:var(--text);
+  font-family:'Syne',sans-serif; font-size:1rem; font-weight:700;
+  width:72px; padding:6px 8px; border-radius:8px; text-align:center; transition:border-color 0.2s;
+}
+.goal-input:focus { outline:none; border-color:var(--teal); }
+.goal-input-unit { font-size:0.75rem; color:var(--muted); }
+
+.goal-checkbox-wrap { display:flex; align-items:center; gap:10px; cursor:pointer; }
+.custom-cb {
+  width:26px; height:26px; border-radius:7px; border:2px solid var(--muted2);
+  display:flex; align-items:center; justify-content:center;
+  transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1); font-size:0.9rem; color:transparent; flex-shrink:0;
+}
+.custom-cb.on { background:var(--teal2); border-color:var(--teal); color:white; box-shadow:0 0 10px var(--glow-t); }
+.cb-label { font-size:0.85rem; color:var(--muted); }
+.cb-label.done { color:var(--teal); font-weight:500; }
+
+.g-prog-row { display:flex; align-items:center; gap:8px; }
+.g-prog-track { flex:1; height:4px; background:var(--bg3); border-radius:99px; overflow:hidden; }
+.g-prog-fill { height:100%; border-radius:99px; transition:width 0.6s cubic-bezier(0.34,1.56,0.64,1); }
+.g-prog-pct  { font-size:0.7rem; font-weight:600; min-width:32px; text-align:right; }
+.weight-row  { display:flex; align-items:center; gap:8px; margin-top:4px; font-size:0.75rem; color:var(--muted); }
+.weight-row strong { color:var(--text); }
+
+/* ============================================================
+   COMPLETE BUTTON
+============================================================ */
+.complete-btn {
+  width:100%; margin-top:20px; padding:16px;
+  background: linear-gradient(135deg, var(--purple2), var(--purple));
+  color:white; border:none; border-radius:14px;
+  font-family:'Syne',sans-serif; font-size:1rem; font-weight:700; letter-spacing:0.5px;
+  cursor:pointer; transition:all 0.3s;
+  box-shadow:0 4px 24px rgba(124,58,237,0.4);
+  position:relative; overflow:hidden;
+  animation:slideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.4s both;
+}
+.complete-btn::before {
+  content:''; position:absolute; inset:0;
+  background: linear-gradient(135deg, var(--purple), var(--pink));
+  opacity:0; transition:opacity 0.3s;
+}
+.complete-btn:hover::before { opacity:1; }
+.complete-btn:hover { transform:translateY(-2px); box-shadow:0 8px 32px rgba(168,85,247,0.5); }
+.complete-btn span { position:relative; z-index:1; }
+.complete-btn.done-today { background:var(--bg3); color:var(--green); box-shadow:0 0 0 1px var(--green); cursor:default; }
+.complete-btn.done-today:hover { transform:none; }
+.complete-btn.done-today::before { display:none; }
+
+/* ============================================================
+   PROGRESS SECTION
+============================================================ */
+.prog-section {
+  background:var(--card); border:1px solid var(--border); border-radius:18px;
+  padding:18px; margin-top:14px;
+  animation:slideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.5s both;
+}
+.prog-item { display:grid; grid-template-columns:28px 1fr auto; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
+.prog-item:last-child { border-bottom:none; }
+.prog-item .p-icon  { font-size:1rem; text-align:center; }
+.prog-item .p-label { font-size:0.8rem; margin-bottom:4px; }
+.prog-item .p-track { height:5px; background:var(--bg3); border-radius:99px; overflow:hidden; }
+.prog-item .p-fill  { height:100%; border-radius:99px; transition:width 0.7s cubic-bezier(0.34,1.56,0.64,1); }
+.prog-item .p-nums  { font-size:0.7rem; color:var(--muted); white-space:nowrap; text-align:right; }
+
+/* ============================================================
+   BADGES
+============================================================ */
+.badges-section {
+  background:var(--card); border:1px solid var(--border); border-radius:18px;
+  padding:18px; margin-top:14px;
+  animation:slideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.6s both;
+}
+.badges-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(90px, 1fr)); gap:10px; margin-top:12px; }
+.badge-item {
+  background:var(--bg3); border:1px solid var(--border); border-radius:12px;
+  padding:12px 8px; text-align:center; transition:all 0.3s;
+  filter:grayscale(1) opacity(0.4);
+}
+.badge-item.unlocked {
+  filter:none; border-color:transparent;
+  background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(45,212,191,0.1));
+  box-shadow:0 0 16px rgba(168,85,247,0.2);
+}
+.badge-item .b-icon { font-size:1.6rem; display:block; margin-bottom:5px; }
+.badge-item .b-name { font-size:0.65rem; font-weight:600; color:var(--muted); line-height:1.3; }
+.badge-item.unlocked .b-name { color:var(--text); }
+
+/* ============================================================
+   DATA BUTTONS
+============================================================ */
+.data-btns { display:flex; gap:10px; margin-top:20px; animation:slideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.7s both; }
+.data-btn {
+  flex:1; padding:12px; background:var(--card); border:1px solid var(--border);
+  color:var(--muted); border-radius:12px; font-family:'DM Sans',sans-serif; font-size:0.8rem;
+  cursor:pointer; transition:all 0.2s; text-align:center;
+}
+.data-btn:hover { color:var(--text); border-color:rgba(255,255,255,0.15); }
+
+/* ============================================================
+   TOAST
+============================================================ */
+.toast-container { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:8px; z-index:999; pointer-events:none; }
+.toast {
+  background:var(--bg3); border:1px solid var(--border); color:var(--text);
+  padding:10px 20px; border-radius:99px; font-size:0.85rem; font-weight:500;
+  white-space:nowrap; opacity:0; transform:translateY(20px) scale(0.9);
+  transition:all 0.4s cubic-bezier(0.34,1.56,0.64,1); box-shadow:0 4px 20px rgba(0,0,0,0.5);
+}
+.toast.show { opacity:1; transform:translateY(0) scale(1); }
+
+/* Level-up modal */
+.levelup-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center; }
+.levelup-overlay.show { display:flex; }
+.levelup-box {
+  background:var(--card); border:1px solid var(--purple); border-radius:24px;
+  padding:36px 32px; text-align:center; max-width:320px; width:90%;
+  box-shadow:0 0 60px var(--glow-p); animation:popIn 0.5s cubic-bezier(0.34,1.56,0.64,1);
+}
+.levelup-box .lu-label { font-size:0.75rem; letter-spacing:3px; text-transform:uppercase; color:var(--purple); margin-bottom:8px; }
+.levelup-box .lu-level {
+  font-family:'Syne',sans-serif; font-size:4rem; font-weight:800;
+  background:linear-gradient(135deg, var(--purple), var(--teal));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1;
+}
+.levelup-box .lu-text { color:var(--muted); font-size:0.9rem; margin:10px 0 20px; }
+.levelup-close {
+  background:linear-gradient(135deg, var(--purple2), var(--purple));
+  color:white; border:none; padding:12px 32px; border-radius:99px;
+  font-family:'Syne',sans-serif; font-size:0.9rem; font-weight:700; cursor:pointer; transition:transform 0.2s;
+}
+.levelup-close:hover { transform:scale(1.05); }
+
+/* ============================================================
+   ANIMATIONS
+============================================================ */
+@keyframes slideDown { from{opacity:0;transform:translateY(-24px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideUp   { from{opacity:0;transform:translateY(24px)}  to{opacity:1;transform:translateY(0)} }
+@keyframes popIn     { from{opacity:0;transform:scale(0.7)}         to{opacity:1;transform:scale(1)} }
+@keyframes shimmer   { 0%{opacity:0} 50%{opacity:1} 100%{opacity:0} }
+@keyframes pulse     { 0%,100%{box-shadow:0 0 20px var(--glow-p)} 50%{box-shadow:0 0 40px var(--glow-p),0 0 60px rgba(168,85,247,0.2)} }
+</style>
+</head>
+<body>
+
+<!-- Sync bar & pills -->
+<div id="syncBar"></div>
+<div class="sync-pill" id="syncPill"><div class="sync-dot"></div><span class="sync-label" id="syncLabel">Offline</span></div>
+<div class="user-pill" id="userPill" onclick="toggleSignout()" style="display:none">
+  <div class="user-avatar" id="userAvatar"></div>
+  <span class="user-name" id="userName"></span>
+</div>
+<div class="signout-tip" id="signoutTip" onclick="signOut()">🚪 Sign Out</div>
+
+<!-- Level-up modal -->
+<div class="levelup-overlay" id="levelupOverlay">
+  <div class="levelup-box">
+    <div class="lu-label">✦ Level Up! ✦</div>
+    <div class="lu-level" id="luLevel">5</div>
+    <div class="lu-text">You've ascended to a new level.<br>Keep pushing — greatness awaits.</div>
+    <button class="levelup-close" onclick="closeLevelUp()">Continue →</button>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ============================================================
+     LOGIN SCREEN
+============================================================ -->
+<div id="loginScreen">
+  <div class="login-logo">ASCEND</div>
+  <div class="login-sub">150 Day Challenge</div>
+  <div class="login-card">
+    <h2>Welcome back 👋</h2>
+    <p>Sign in to sync your progress across all your devices — your data is saved safely in the cloud.</p>
+    <button class="google-btn" onclick="signInWithGoogle()">
+      <svg class="google-icon" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Continue with Google
+    </button>
+    <div class="login-note">🔒 Your data is private and only accessible with your Google account</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MAIN APP SCREEN
+============================================================ -->
+<div id="appScreen">
+<div class="wrapper">
+
+  <header class="app-header">
+    <div class="app-logo">ASCEND</div>
+    <div class="app-tagline">150 Day Challenge</div>
+  </header>
+
+  <!-- Hero Dashboard -->
+  <div class="hero">
+    <div class="hero-top">
+      <div class="level-badge">
+        <div class="level-orb" id="levelOrb">
+          <span class="lv-label">LVL</span>
+          <span class="lv-num" id="heroLevel">1</span>
+        </div>
+        <div class="level-info">
+          <h2 id="heroTitle">Seeker</h2>
+          <div class="xp-text">Total XP: <span id="heroTotalXP">0</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-pill streak-pill">
+        <span class="pill-icon">🔥</span>
+        <div><div class="pill-val" id="statStreak">0</div><div class="pill-lbl">Day Streak</div></div>
+      </div>
+      <div class="stat-pill freeze-pill">
+        <span class="pill-icon">🧊</span>
+        <div><div class="pill-val" id="statFreezes">0</div><div class="pill-lbl">Freezes</div></div>
+      </div>
+      <div class="stat-pill totalxp-pill">
+        <span class="pill-icon">⚡</span>
+        <div><div class="pill-val" id="statTodayXP">0</div><div class="pill-lbl">Today's XP</div></div>
+      </div>
+    </div>
+    <div class="xp-bar-label">
+      <span>XP to next level</span>
+      <span id="xpBarLabel">0 / 1000 XP</span>
+    </div>
+    <div class="xp-bar-track">
+      <div class="xp-bar-fill" id="xpBarFill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Day Navigator -->
+  <div class="day-nav">
+    <button class="nav-arrow" onclick="changeDay(-1)">←</button>
+    <div class="day-nav-center">
+      <div class="day-big" id="navDayNum">Day 1</div>
+      <div class="day-sub" id="navDayDate">of 150</div>
+    </div>
+    <button class="nav-arrow" onclick="changeDay(1)">→</button>
+  </div>
+
+  <!-- Goals -->
+  <div class="section-label">Today's Goals</div>
+  <div class="goals-grid" id="goalsGrid"></div>
+
+  <!-- Complete Button -->
+  <button class="complete-btn" id="completeBtn" onclick="completeDay()">
+    <span>⚡ Complete Day & Earn XP</span>
+  </button>
+
+  <!-- Progress -->
+  <div class="section-label">Overall Progress</div>
+  <div class="prog-section" id="progSection"></div>
+
+  <!-- Badges -->
+  <div class="section-label">Achievements</div>
+  <div class="badges-section">
+    <div style="font-size:0.8rem;color:var(--muted)">Unlock badges by hitting milestones. Keep going!</div>
+    <div class="badges-grid" id="badgesGrid"></div>
+  </div>
+
+  <!-- Data Buttons -->
+  <div class="data-btns">
+    <button class="data-btn" onclick="exportData()">📤 Export Backup</button>
+    <button class="data-btn" onclick="importData()">📥 Import Backup</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(event)">
+  </div>
+
+</div><!-- /wrapper -->
+</div><!-- /appScreen -->
+
+<!-- ============================================================
+     JAVASCRIPT
+============================================================ -->
+<script>
+/* ============================================================
+   FIREBASE INIT
+============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAtpMueLUSDuh-lckHbqJApInIB9RENFgo",
+  authDomain: "ascend150-by-meeran.firebaseapp.com",
+  projectId: "ascend150-by-meeran",
+  storageBucket: "ascend150-by-meeran.firebasestorage.app",
+  messagingSenderId: "951426499915",
+  appId: "1:951426499915:web:b45b2e8f392d0551a294ce"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+// Enable offline persistence so it works without internet
+db.enablePersistence({ synchronizeTabs: true })
+  .catch(err => console.warn('Persistence unavailable:', err.code));
+
+/* ============================================================
+   CONFIG
+============================================================ */
+const TOTAL_DAYS  = 150;
+const XP_PER_LEVEL = 1000;
+
+const GOALS = [
+  { id:'quran',    icon:'📖', title:'Quran Pages',    type:'number',   unit:'pages',   target:611,  step:1,   xpPer:5,    color:'#FBBF24' },
+  { id:'run',      icon:'🏃', title:'Running',        type:'number',   unit:'km',      target:70,   step:0.5, xpPer:50,   color:'#34D399' },
+  { id:'meditate', icon:'🧘', title:'Meditation',     type:'number',   unit:'min',     target:1000, step:5,   xpPer:2,    color:'#60A5FA' },
+  { id:'study',    icon:'📚', title:'Study',          type:'number',   unit:'hrs',     target:560,  step:0.5, xpPer:50,   color:'#A78BFA' },
+  { id:'books',    icon:'📕', title:'Books',          type:'number',   unit:'books',   target:3,    step:1,   xpPer:500,  color:'#F97316' },
+  { id:'prayer',   icon:'🕌', title:'Masjid Prayers', type:'number',   unit:'prayers', target:300,  step:1,   xpPer:15,   color:'#2DD4BF' },
+  { id:'journal',  icon:'✍️', title:'Journal',        type:'checkbox', target:100,               xpFlat:30, color:'#F472B6' },
+  { id:'weight',   icon:'⚖️', title:'Weight',         type:'weight',   unit:'kg',      start:80,   goal:72,  xpPerKg:100, color:'#FB7185' },
+];
+
+const BADGES = [
+  { id:'first_day',   icon:'🌱', name:'First Step',     check: s => s.completedDays >= 1 },
+  { id:'streak7',     icon:'🔥', name:'7-Day Streak',   check: s => s.maxStreak >= 7 },
+  { id:'streak30',    icon:'💥', name:'30-Day Streak',  check: s => s.maxStreak >= 30 },
+  { id:'run5',        icon:'👟', name:'First 5km',      check: s => cumTotal('run',s) >= 5 },
+  { id:'run_half',    icon:'🏅', name:'Half Challenge', check: s => cumTotal('run',s) >= 35 },
+  { id:'pages50',     icon:'📖', name:'50 Pages',       check: s => cumTotal('quran',s) >= 50 },
+  { id:'quran_done',  icon:'🌙', name:'Quran Complete', check: s => cumTotal('quran',s) >= 611 },
+  { id:'weight_1kg',  icon:'⚖️', name:'First kg Lost', check: s => bestWeight(s) <= 79 },
+  { id:'weight_goal', icon:'🏆', name:'Goal Weight',    check: s => bestWeight(s) <= 72 },
+  { id:'level5',      icon:'⚡', name:'Level 5',        check: s => s.level >= 5 },
+  { id:'level10',     icon:'💎', name:'Level 10',       check: s => s.level >= 10 },
+  { id:'level20',     icon:'👑', name:'Legendary',      check: s => s.level >= 20 },
+  { id:'study100',    icon:'📚', name:'Scholar',        check: s => cumTotal('study',s) >= 100 },
+  { id:'prayer50',    icon:'🕌', name:'Devoted',        check: s => cumTotal('prayer',s) >= 50 },
+  { id:'journal30',   icon:'✍️', name:'Chronicler',     check: s => checkedDays('journal',s) >= 30 },
+];
+
+const LEVEL_TITLES = [
+  'Seeker','Initiate','Apprentice','Devoted','Scholar',
+  'Warrior','Guardian','Sage','Champion','Legend',
+  'Master','Grandmaster','Ascendant','Paragon','Transcendent',
+  'Immortal','Celestial','Divine','Eternal','MAXIMUM LEVEL'
+];
+
+/* ============================================================
+   STATE
+============================================================ */
+let state = {
+  days: {}, totalXP: 0, level: 1, streak: 0, maxStreak: 0,
+  freezes: 0, lastCompletedDay: null, unlockedBadges: [], completedDays: 0
+};
+
+let currentDay  = 1;
+let currentUser = null;
+let saveTimeout = null;
+
+/* ============================================================
+   AUTH
+============================================================ */
+function signInWithGoogle() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    showToast('❌ Sign-in failed: ' + err.message, 'var(--red)');
+  });
+}
+
+function signOut() {
+  auth.signOut();
+  document.getElementById('signoutTip').style.display = 'none';
+}
+
+function toggleSignout() {
+  const tip = document.getElementById('signoutTip');
+  tip.style.display = tip.style.display === 'block' ? 'none' : 'block';
+}
+
+// Hide signout when clicking elsewhere
+document.addEventListener('click', e => {
+  if (!e.target.closest('#userPill') && !e.target.closest('#signoutTip')) {
+    document.getElementById('signoutTip').style.display = 'none';
+  }
+});
+
+// Auth state listener — main entry point
+auth.onAuthStateChanged(user => {
+  if (user) {
+    currentUser = user;
+    showApp(user);
+    loadFromFirestore();
+  } else {
+    currentUser = null;
+    showLogin();
+  }
+});
+
+function showLogin() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appScreen').style.display   = 'none';
+  document.getElementById('userPill').style.display    = 'none';
+}
+
+function showApp(user) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display   = 'block';
+
+  // User pill
+  const pill = document.getElementById('userPill');
+  pill.style.display = 'flex';
+  document.getElementById('userName').textContent = user.displayName?.split(' ')[0] || 'You';
+  const avatar = document.getElementById('userAvatar');
+  avatar.innerHTML = user.photoURL
+    ? `<img src="${user.photoURL}" alt="avatar">`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700">${(user.displayName||'?')[0]}</div>`;
+}
+
+/* ============================================================
+   FIRESTORE — LOAD & SAVE
+============================================================ */
+function userDoc() {
+  return db.collection('users').doc(currentUser.uid);
+}
+
+function loadFromFirestore() {
+  setSyncStatus('syncing', 'Loading…');
+  userDoc().get().then(doc => {
+    if (doc.exists) {
+      state = { ...state, ...doc.data() };
+      // Firestore stores nested objects fine; days is already an object
+    }
+    render();
+    setSyncStatus('saved', 'Synced');
+  }).catch(err => {
+    console.warn('Load failed, using localStorage fallback', err);
+    loadLocalFallback();
+    render();
+    setSyncStatus('error', 'Offline');
+  });
+
+  // Real-time listener for multi-device sync
+  userDoc().onSnapshot(doc => {
+    if (doc.exists && doc.metadata.hasPendingWrites === false) {
+      const incoming = doc.data();
+      // Only update if remote is newer (higher totalXP)
+      if (incoming && incoming.totalXP > state.totalXP) {
+        state = { ...state, ...incoming };
+        render();
+        showToast('☁️ Synced from another device', 'var(--teal)');
+      }
+    }
+  }, err => console.warn('Snapshot error:', err));
+}
+
+function saveToFirestore() {
+  if (!currentUser) return;
+  setSyncStatus('syncing', 'Saving…');
+
+  // Also save locally as fallback
+  saveLocalFallback();
+
+  // Debounce — wait 1.5s after last change before saving to Firestore
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    userDoc().set(state, { merge: true })
+      .then(() => setSyncStatus('saved', 'Synced ✓'))
+      .catch(err => {
+        console.warn('Firestore save failed:', err);
+        setSyncStatus('error', 'Saved locally');
+      });
+  }, 1500);
+}
+
+/* ============================================================
+   LOCAL STORAGE FALLBACK
+============================================================ */
+function saveLocalFallback() {
+  try { localStorage.setItem('ascend150_backup', JSON.stringify(state)); } catch(e) {}
+}
+function loadLocalFallback() {
+  try {
+    const raw = localStorage.getItem('ascend150_backup');
+    if (raw) state = { ...state, ...JSON.parse(raw) };
+  } catch(e) {}
+}
+
+/* ============================================================
+   SYNC STATUS UI
+============================================================ */
+function setSyncStatus(status, label) {
+  const bar  = document.getElementById('syncBar');
+  const pill = document.getElementById('syncPill');
+  const lbl  = document.getElementById('syncLabel');
+  bar.className  = status;
+  pill.className = 'sync-pill ' + status;
+  lbl.textContent = label;
+  if (status === 'saved') {
+    setTimeout(() => { bar.className = ''; }, 2000);
+  }
+}
+
+/* ============================================================
+   HELPERS
+============================================================ */
+function getDay(d)       { return state.days[d] || {}; }
+function levelFromXP(xp) { return Math.floor(xp / XP_PER_LEVEL) + 1; }
+function xpInLevel(xp)   { return xp % XP_PER_LEVEL; }
+
+function cumTotal(id, s) {
+  let t = 0;
+  for (let d = 1; d <= TOTAL_DAYS; d++) {
+    const v = (s.days[d] || {})[id];
+    if (v && typeof v === 'number') t += v;
+  }
+  return t;
+}
+
+function checkedDays(id, s) {
+  let c = 0;
+  for (let d = 1; d <= TOTAL_DAYS; d++) {
+    if ((s.days[d] || {})[id] === true) c++;
+  }
+  return c;
+}
+
+function bestWeight(s) {
+  let best = 80;
+  for (let d = 1; d <= TOTAL_DAYS; d++) {
+    const w = (s.days[d] || {}).weight;
+    if (w && w < best) best = w;
+  }
+  return best;
+}
+
+function todayDateStr() { return new Date().toISOString().split('T')[0]; }
+
+/* ============================================================
+   STREAK
+============================================================ */
+function updateStreak() {
+  const today = todayDateStr();
+  if (state.lastCompletedDay === today) return;
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yStr = yesterday.toISOString().split('T')[0];
+
+  if (state.lastCompletedDay === yStr) {
+    state.streak += 1;
+  } else if (state.lastCompletedDay && state.lastCompletedDay !== yStr) {
+    if (state.freezes > 0) {
+      state.freezes -= 1;
+      state.streak  += 1;
+      showToast('🧊 Streak Freeze used! Streak saved!', 'var(--teal)');
+    } else {
+      state.streak = 1;
+    }
+  } else {
+    state.streak = 1;
+  }
+  if (state.streak > state.maxStreak) state.maxStreak = state.streak;
+  state.lastCompletedDay = today;
+}
+
+/* ============================================================
+   BADGES
+============================================================ */
+function checkBadges() {
+  BADGES.forEach(b => {
+    if (!state.unlockedBadges.includes(b.id) && b.check(state)) {
+      state.unlockedBadges.push(b.id);
+      showToast(`🏅 Badge Unlocked: ${b.name}!`, 'var(--gold)');
+      smallConfetti();
+    }
+  });
+}
+
+/* ============================================================
+   COMPLETE DAY
+============================================================ */
+function completeDay() {
+  const btn = document.getElementById('completeBtn');
+  if (btn.classList.contains('done-today')) return;
+
+  const dayObj = {};
+  let xp = 0;
+
+  GOALS.forEach(g => {
+    if (g.type === 'number') {
+      const v = parseFloat(document.getElementById('inp_' + g.id)?.value || 0);
+      dayObj[g.id] = v;
+      xp += v * g.xpPer;
+    } else if (g.type === 'checkbox') {
+      const checked = document.getElementById('cb_' + g.id)?.dataset.checked === 'true';
+      dayObj[g.id] = checked;
+      if (checked) xp += g.xpFlat;
+    } else if (g.type === 'weight') {
+      const newW = parseFloat(document.getElementById('inp_weight')?.value || 80);
+      dayObj.weight = newW;
+      const prevBest = bestWeight(state);
+      if (newW < prevBest) {
+        const kgLost = Math.floor(prevBest - newW);
+        xp += kgLost * g.xpPerKg;
+      }
+    }
+  });
+
+  xp = Math.round(xp);
+  dayObj.xpEarned  = xp;
+  dayObj.completed = true;
+
+  const prevLevel = state.level;
+  state.days[currentDay] = dayObj;
+  state.totalXP  += xp;
+  state.level     = levelFromXP(state.totalXP);
+  state.completedDays = Object.values(state.days).filter(d => d.completed).length;
+
+  // Freeze bonuses
+  const newFreezesEarned = Math.floor(state.level / 5) - Math.floor(prevLevel / 5);
+  if (newFreezesEarned > 0) {
+    state.freezes += newFreezesEarned;
+    showToast(`🧊 +${newFreezesEarned} Streak Freeze earned!`, 'var(--teal)');
+  }
+
+  updateStreak();
+  checkBadges();
+  saveToFirestore();
+  render();
+
+  showToast(`⚡ +${xp} XP earned!`, 'var(--purple)');
+  smallConfetti();
+
+  if (state.level > prevLevel) {
+    bigConfetti();
+    setTimeout(() => showLevelUp(state.level), 600);
+  }
+
+  btn.innerHTML = '<span>✅ Day Completed!</span>';
+  btn.classList.add('done-today');
+}
+
+/* ============================================================
+   RENDER
+============================================================ */
+function render() {
+  renderHero();
+  renderDayNav();
+  renderGoals();
+  renderProgress();
+  renderBadges();
+}
+
+function renderHero() {
+  const xpIn = xpInLevel(state.totalXP);
+  const pct  = (xpIn / XP_PER_LEVEL) * 100;
+  document.getElementById('heroLevel').textContent   = state.level;
+  document.getElementById('heroTitle').textContent   = LEVEL_TITLES[Math.min(state.level - 1, LEVEL_TITLES.length - 1)];
+  document.getElementById('heroTotalXP').textContent = state.totalXP.toLocaleString();
+  document.getElementById('statStreak').textContent  = state.streak;
+  document.getElementById('statFreezes').textContent = state.freezes;
+  document.getElementById('statTodayXP').textContent = (state.days[currentDay]?.xpEarned || 0);
+  document.getElementById('xpBarLabel').textContent  = `${xpIn} / ${XP_PER_LEVEL} XP`;
+  document.getElementById('xpBarFill').style.width   = pct + '%';
+}
+
+function renderDayNav() {
+  document.getElementById('navDayNum').textContent = 'Day ' + currentDay;
+  const btn = document.getElementById('completeBtn');
+  if (getDay(currentDay).completed) {
+    btn.innerHTML = '<span>✅ Day Completed!</span>';
+    btn.classList.add('done-today');
+  } else {
+    btn.innerHTML = '<span>⚡ Complete Day & Earn XP</span>';
+    btn.classList.remove('done-today');
+  }
+}
+
+function renderGoals() {
+  const grid    = document.getElementById('goalsGrid');
+  const dayData = getDay(currentDay);
+  grid.innerHTML = '';
+
+  GOALS.forEach(g => {
+    const card = document.createElement('div');
+    card.className = 'goal-card';
+    const accent = document.createElement('div');
+    accent.className = 'accent-line';
+    accent.style.background = g.color;
+    card.appendChild(accent);
+
+    if (g.type === 'checkbox') {
+      const isChecked = dayData[g.id] === true;
+      const daysHit   = checkedDays(g.id, state);
+      const pct       = Math.min(100, (daysHit / g.target) * 100);
+      card.innerHTML += `
+        <div class="goal-row">
+          <div class="goal-icon-wrap">${g.icon}</div>
+          <div class="goal-meta">
+            <div class="g-title">${g.title}</div>
+            <div class="g-xp">+${g.xpFlat} XP if done · ${daysHit}/${g.target} days</div>
+          </div>
+          <div class="goal-checkbox-wrap" onclick="toggleCB('${g.id}', this)">
+            <div class="custom-cb ${isChecked?'on':''}" id="cb_${g.id}" data-checked="${isChecked}">✓</div>
+            <span class="cb-label ${isChecked?'done':''}">${isChecked?'Done ✦':'Not yet'}</span>
+          </div>
+        </div>
+        <div class="g-prog-row">
+          <div class="g-prog-track"><div class="g-prog-fill" style="width:${pct}%;background:${g.color}"></div></div>
+          <div class="g-prog-pct" style="color:${g.color}">${Math.round(pct)}%</div>
+        </div>`;
+
+    } else if (g.type === 'weight') {
+      const currentW = dayData.weight !== undefined ? dayData.weight : (state.days[currentDay-1]?.weight || g.start);
+      const lost = Math.max(0, g.start - currentW);
+      const toGo = Math.max(0, currentW - g.goal);
+      const pct  = Math.min(100, (lost / (g.start - g.goal)) * 100);
+      card.innerHTML += `
+        <div class="goal-row">
+          <div class="goal-icon-wrap">${g.icon}</div>
+          <div class="goal-meta">
+            <div class="g-title">${g.title}</div>
+            <div class="g-xp">+${g.xpPerKg} XP per kg lost · Goal: ${g.goal}kg</div>
+          </div>
+          <div class="goal-input-wrap">
+            <input type="number" class="goal-input" id="inp_weight" value="${currentW}" step="0.1" min="50" max="200">
+            <span class="goal-input-unit">kg</span>
+          </div>
+        </div>
+        <div class="g-prog-row">
+          <div class="g-prog-track"><div class="g-prog-fill" style="width:${pct}%;background:${g.color}"></div></div>
+          <div class="g-prog-pct" style="color:${g.color}">${Math.round(pct)}%</div>
+        </div>
+        <div class="weight-row">Lost: <strong>${lost.toFixed(1)}kg</strong> &nbsp;·&nbsp; To go: <strong>${toGo.toFixed(1)}kg</strong></div>`;
+
+    } else {
+      const todayV = dayData[g.id] || 0;
+      const cumV   = cumTotal(g.id, state);
+      const pct    = Math.min(100, (cumV / g.target) * 100);
+      card.innerHTML += `
+        <div class="goal-row">
+          <div class="goal-icon-wrap">${g.icon}</div>
+          <div class="goal-meta">
+            <div class="g-title">${g.title}</div>
+            <div class="g-xp">+${g.xpPer} XP/${g.unit} · ${cumV.toFixed(g.step<1?1:0)} / ${g.target} ${g.unit}</div>
+          </div>
+          <div class="goal-input-wrap">
+            <input type="number" class="goal-input" id="inp_${g.id}" value="${todayV}" step="${g.step}" min="0">
+            <span class="goal-input-unit">${g.unit}</span>
+          </div>
+        </div>
+        <div class="g-prog-row">
+          <div class="g-prog-track"><div class="g-prog-fill" style="width:${pct}%;background:${g.color}"></div></div>
+          <div class="g-prog-pct" style="color:${g.color}">${Math.round(pct)}%</div>
+        </div>`;
+    }
+    grid.appendChild(card);
+  });
+}
+
+function renderProgress() {
+  const sec = document.getElementById('progSection');
+  sec.innerHTML = '';
+  GOALS.forEach(g => {
+    let pct, nums;
+    if (g.type === 'checkbox') {
+      const days = checkedDays(g.id, state);
+      pct = Math.min(100, (days / g.target) * 100);
+      nums = `${days} / ${g.target} days`;
+    } else if (g.type === 'weight') {
+      const best = bestWeight(state);
+      const lost = Math.max(0, g.start - best);
+      pct  = Math.min(100, (lost / (g.start - g.goal)) * 100);
+      nums = `${best}kg (−${lost.toFixed(1)}kg)`;
+    } else {
+      const cum = cumTotal(g.id, state);
+      pct  = Math.min(100, (cum / g.target) * 100);
+      nums = `${cum.toFixed(g.step<1?1:0)} / ${g.target} ${g.unit}`;
+    }
+    sec.innerHTML += `
+      <div class="prog-item">
+        <div class="p-icon">${g.icon}</div>
+        <div class="p-bar-wrap">
+          <div class="p-label">${g.title}</div>
+          <div class="p-track"><div class="p-fill" style="width:${pct}%;background:${g.color}"></div></div>
+        </div>
+        <div class="p-nums">${nums}</div>
+      </div>`;
+  });
+}
+
+function renderBadges() {
+  const grid = document.getElementById('badgesGrid');
+  grid.innerHTML = '';
+  BADGES.forEach(b => {
+    const unlocked = state.unlockedBadges.includes(b.id);
+    grid.innerHTML += `
+      <div class="badge-item ${unlocked?'unlocked':''}">
+        <span class="b-icon">${b.icon}</span>
+        <span class="b-name">${b.name}</span>
+      </div>`;
+  });
+}
+
+/* ============================================================
+   INTERACTIONS
+============================================================ */
+function toggleCB(id, wrap) {
+  const cb    = document.getElementById('cb_' + id);
+  const label = wrap.querySelector('.cb-label');
+  const isOn  = cb.dataset.checked === 'true';
+  cb.dataset.checked = String(!isOn);
+  cb.classList.toggle('on', !isOn);
+  label.textContent = !isOn ? 'Done ✦' : 'Not yet';
+  label.classList.toggle('done', !isOn);
+}
+
+function changeDay(dir) {
+  const next = currentDay + dir;
+  if (next >= 1 && next <= TOTAL_DAYS) { currentDay = next; render(); }
+}
+
+/* ============================================================
+   LEVEL UP MODAL
+============================================================ */
+function showLevelUp(level) {
+  document.getElementById('luLevel').textContent = level;
+  document.getElementById('levelupOverlay').classList.add('show');
+}
+function closeLevelUp() { document.getElementById('levelupOverlay').classList.remove('show'); }
+
+/* ============================================================
+   TOASTS
+============================================================ */
+function showToast(msg, color = 'var(--purple)') {
+  const container = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  t.style.borderColor = color;
+  t.style.color = color;
+  container.appendChild(t);
+  requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('show')));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 500); }, 2800);
+}
+
+/* ============================================================
+   CONFETTI
+============================================================ */
+function smallConfetti() {
+  confetti({ particleCount:60, spread:70, origin:{y:0.7}, colors:['#A855F7','#2DD4BF','#F472B6','#FBBF24'] });
+}
+function bigConfetti() {
+  const end = Date.now() + 2500;
+  const frame = () => {
+    confetti({ particleCount:6, angle:60,  spread:55, origin:{x:0}, colors:['#A855F7','#2DD4BF','#F472B6'] });
+    confetti({ particleCount:6, angle:120, spread:55, origin:{x:1}, colors:['#FBBF24','#34D399','#60A5FA'] });
+    if (Date.now() < end) requestAnimationFrame(frame);
+  };
+  frame();
+}
+
+/* ============================================================
+   EXPORT / IMPORT
+============================================================ */
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type:'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `ascend150_backup_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📤 Backup exported!', 'var(--teal)');
+}
+
+function importData() { document.getElementById('importFile').click(); }
+
+function handleImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      state = JSON.parse(ev.target.result);
+      saveToFirestore();
+      render();
+      showToast('📥 Data restored & synced!', 'var(--green)');
+    } catch { showToast('❌ Invalid file', 'var(--red)'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* ============================================================
+   SERVICE WORKER
+============================================================ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(() => console.log('✅ SW registered'))
+      .catch(e => console.warn('SW failed:', e));
+  });
+}
+</script>
+</body>
+</html>
