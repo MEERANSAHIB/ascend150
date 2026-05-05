@@ -765,10 +765,23 @@ let saveTimeout = null;
 ============================================================ */
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(err => {
+  // Using redirect instead of popup — works on all domains without OAuth config
+  auth.signInWithRedirect(provider).catch(err => {
     showToast('❌ Sign-in failed: ' + err.message, 'var(--red)');
   });
 }
+
+// Handle the result when user is redirected back after Google sign-in
+auth.getRedirectResult().then(result => {
+  if (result && result.user) {
+    // Successfully signed in via redirect — auth state listener will handle the rest
+    console.log('✅ Redirect sign-in successful:', result.user.displayName);
+  }
+}).catch(err => {
+  if (err.code !== 'auth/no-auth-event') {
+    showToast('❌ Sign-in error: ' + err.message, 'var(--red)');
+  }
+});
 
 function signOut() {
   auth.signOut();
