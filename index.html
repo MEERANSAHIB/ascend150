@@ -651,6 +651,14 @@ body::before {
     </div>
     <button class="nav-arrow" onclick="changeDay(1)">→</button>
   </div>
+  <div style="text-align:center;margin-top:-6px;margin-bottom:8px">
+    <button id="jumpTodayBtn" onclick="jumpToToday()"
+      style="display:none;background:rgba(45,212,191,0.1);border:1px solid var(--teal);color:var(--teal);
+             padding:5px 16px;border-radius:99px;font-size:0.75rem;font-weight:600;cursor:pointer;
+             font-family:'DM Sans',sans-serif;transition:all 0.2s">
+      ↩ Jump to Today
+    </button>
+  </div>
 
   <!-- Goals -->
   <div class="section-label">Today's Goals</div>
@@ -756,7 +764,15 @@ let state = {
   freezes: 0, lastCompletedDay: null, unlockedBadges: [], completedDays: 0
 };
 
-let currentDay  = 1;
+// Auto-calculate current day based on challenge start date (May 1, 2025)
+const CHALLENGE_START = new Date('2025-05-01T00:00:00');
+function calcCurrentDay() {
+  const now  = new Date();
+  const diff = Math.floor((now - CHALLENGE_START) / (1000 * 60 * 60 * 24));
+  return Math.min(Math.max(diff + 1, 1), TOTAL_DAYS); // clamp between 1 and 150
+}
+
+let currentDay  = calcCurrentDay();
 let currentUser = null;
 let saveTimeout = null;
 
@@ -764,37 +780,57 @@ let saveTimeout = null;
    AUTH
 ============================================================ */
 function signInWithGoogle() {
-  // The trick: initialize a temporary second Firebase app that uses Firebase own domain
-  // for authDomain. This bypasses the GitHub Pages domain restriction completely.
+  // Pure redirect using Firebase's own firebaseapp.com domain as the authDomain.
+  // This means Google OAuth never sees the github.io domain at all.
+  // We temporarily change the auth object's domain, trigger redirect, done.
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
+  // Re-init auth with Firebase's own domain to avoid github.io being the OAuth origin
+  const tempConfig = { ...firebaseConfig, authDomain: 'ascend150-by-meeran.firebaseapp.com' };
+  const appName = 'redirectAuth';
   let tempApp;
-  try {
-    tempApp = firebase.initializeApp({
-      apiKey: firebaseConfig.apiKey,
-      authDomain: 'ascend150-by-meeran.firebaseapp.com',
-      projectId: firebaseConfig.projectId,
-      appId: firebaseConfig.appId
-    }, 'tempSignIn_' + Date.now());
-  } catch(e) {
-    // App already exists, get it
-    tempApp = firebase.app('tempSignIn');
+  try { tempApp = firebase.app(appName); }
+  catch(e) { tempApp = firebase.initializeApp(tempConfig, appName); }
+
+  const tempAuth = tempApp.auth();
+  // Set persistence so session survives the redirect
+  tempAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(() => {
+    return tempAuth.signInWithRedirect(provider);
+  }).catch(err => {
+    console.error('Redirect error:', err);
+  });
+}
+
+// Called once on page load — handles the return from Google sign-in redirect.
+// We check BOTH the main auth and the temp auth for a redirect result.
+(function handleRedirectOnLoad() {
+  const appName = 'redirectAuth';
+  let tempApp;
+  try { tempApp = firebase.app(appName); }
+  catch(e) {
+    try {
+      tempApp = firebase.initializeApp(
+        { ...firebaseConfig, authDomain: 'ascend150-by-meeran.firebaseapp.com' },
+        appName
+      );
+    } catch(e2) { return; }
   }
 
   const tempAuth = tempApp.auth();
-  tempAuth.signInWithPopup(provider)
-    .then(result => {
-      const credential = result.credential;
-      return auth.signInWithCredential(credential);
-    })
-    .then(() => { try { tempApp.delete(); } catch(e) {} })
-    .catch(err => {
-      try { tempApp.delete(); } catch(e) {}
-      showToast('Sign-in failed. Please try again.', 'var(--red)');
-      console.error('Sign-in error:', err);
-    });
-}
+  tempAuth.getRedirectResult().then(result => {
+    if (result && result.user) {
+      // We have a user from the redirect — sign into main auth with their credential
+      return auth.signInWithCredential(result.credential);
+    }
+  }).catch(err => {
+    // Silently ignore "no redirect" errors — they fire on every normal page load
+    if (err.code !== 'auth/no-auth-event' && err.code !== 'auth/null-user') {
+      console.warn('Redirect result error:', err.code);
+    }
+  });
+})();
+
 
 function signOut() {
   auth.signOut();
@@ -1093,10 +1129,27 @@ function renderHero() {
 }
 
 function renderDayNav() {
+  const todayDay = calcCurrentDay();
   document.getElementById('navDayNum').textContent = 'Day ' + currentDay;
+
+  // Show real date for the displayed day
+  const dayDate = new Date(CHALLENGE_START);
+  dayDate.setDate(dayDate.getDate() + currentDay - 1);
+  const dateStr = dayDate.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  const isToday = currentDay === todayDay;
+  document.getElementById('navDayDate').innerHTML =
+    dateStr + (isToday ? ' &nbsp;<span style="color:var(--teal);font-size:0.65rem;font-weight:700;background:rgba(45,212,191,0.1);padding:2px 7px;border-radius:99px">TODAY</span>' : '');
+
+  // Show/hide jump-to-today button
+  const jumpBtn = document.getElementById('jumpTodayBtn');
+  if (jumpBtn) jumpBtn.style.display = isToday ? 'none' : 'block';
+
   const btn = document.getElementById('completeBtn');
   if (getDay(currentDay).completed) {
     btn.innerHTML = '<span>✅ Day Completed!</span>';
+    btn.classList.add('done-today');
+  } else if (currentDay > todayDay) {
+    btn.innerHTML = '<span>🔒 Future Day</span>';
     btn.classList.add('done-today');
   } else {
     btn.innerHTML = '<span>⚡ Complete Day & Earn XP</span>';
@@ -1246,6 +1299,11 @@ function toggleCB(id, wrap) {
 function changeDay(dir) {
   const next = currentDay + dir;
   if (next >= 1 && next <= TOTAL_DAYS) { currentDay = next; render(); }
+}
+
+function jumpToToday() {
+  currentDay = calcCurrentDay();
+  render();
 }
 
 /* ============================================================
