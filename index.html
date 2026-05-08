@@ -699,7 +699,7 @@ body::before {
 ============================================================ */
 const firebaseConfig = {
   apiKey: "AIzaSyAtpMueLUSDuh-lckHbqJApInIB9RENFgo",
-  authDomain: "ascend150-by-meeran.firebaseapp.com",
+  authDomain: "ascend150-by-meeran.firebaseapp.com", // keeps OAuth on Firebase's own domain
   projectId: "ascend150-by-meeran",
   storageBucket: "ascend150-by-meeran.firebasestorage.app",
   messagingSenderId: "951426499915",
@@ -709,6 +709,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.firestore();
+
 
 // Enable offline persistence so it works without internet
 db.enablePersistence({ synchronizeTabs: true })
@@ -782,81 +783,40 @@ let saveTimeout = null;
 
 /* ============================================================
    AUTH
-   Strategy: use a single Firebase app but point authDomain to
-   Firebase's own domain (firebaseapp.com) so Google OAuth never
-   sees github.io. We re-initialise Firebase with that domain,
-   do the full redirect flow there, and persist the session in
-   localStorage so it survives page reloads.
 ============================================================ */
 
-// Create ONE secondary app with firebaseapp.com as authDomain.
-// This is the app we use for ALL sign-in operations.
-const AUTH_APP_NAME = 'ascendAuth';
-let authApp;
-try { authApp = firebase.app(AUTH_APP_NAME); }
-catch(e) {
-  authApp = firebase.initializeApp(
-    { ...firebaseConfig, authDomain: 'ascend150-by-meeran.firebaseapp.com' },
-    AUTH_APP_NAME
-  );
-}
-const authAppAuth = authApp.auth();
+// Single clean auth state listener — no loops, no temp apps
+let appInitialised = false;
 
-// Keep both auths in sync — when authApp signs in, sign main auth in too
-authAppAuth.onAuthStateChanged(user => {
-  if (user) {
-    // Sign the main auth instance in with same credential via ID token
-    user.getIdToken().then(token => {
-      const cred = firebase.auth.GoogleAuthProvider.credential(null, token);
-      // main auth: just set currentUser directly, skip re-signing in
-      currentUser = user;
-      showApp(user);
-      loadFromFirestore();
-    });
-  }
-});
-
-// Main auth state — handles already-logged-in sessions on refresh
 auth.onAuthStateChanged(user => {
-  if (user && !currentUser) {
+  if (appInitialised) return;
+  appInitialised = true;
+
+  if (user) {
     currentUser = user;
     showApp(user);
     loadFromFirestore();
-  } else if (!user && !currentUser) {
-    // Check authApp too before showing login
-    const authAppUser = authAppAuth.currentUser;
-    if (!authAppUser) showLogin();
+  } else {
+    showLogin();
   }
 });
-
-// On page load, check if we are returning from a Google redirect
-authAppAuth.getRedirectResult()
-  .then(result => {
-    if (result && result.user) {
-      // Redirect completed — user is now signed in via authAppAuth
-      // onAuthStateChanged above will fire and handle showApp
-      console.log('Redirect sign-in complete:', result.user.displayName);
-    }
-  })
-  .catch(err => {
-    // Ignore the "no pending redirect" error that fires on every normal load
-    if (err.code && err.code !== 'auth/no-auth-event') {
-      console.warn('getRedirectResult error:', err.code);
-    }
-  });
 
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  // Use authApp (firebaseapp.com domain) — already whitelisted by Google
-  authAppAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-    .then(() => authAppAuth.signInWithRedirect(provider))
-    .catch(err => console.error('Sign-in redirect error:', err));
+  auth.signInWithPopup(provider)
+    .then(result => {
+      // onAuthStateChanged will fire and handle showApp
+    })
+    .catch(err => {
+      showToast('Sign-in failed: ' + err.message, 'var(--red)');
+    });
 }
 
 function signOut() {
-  Promise.all([auth.signOut(), authAppAuth.signOut()]).then(() => {
+  auth.signOut().then(() => {
     currentUser = null;
+    appInitialised = false;
     document.getElementById('signoutTip').style.display = 'none';
     showLogin();
   });
@@ -889,7 +849,6 @@ function showApp(user) {
   avatar.innerHTML = user.photoURL
     ? `<img src="${user.photoURL}" alt="avatar">`
     : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700">${(user.displayName||'?')[0]}</div>`;
-  render();
 }
 
 /* ============================================================
