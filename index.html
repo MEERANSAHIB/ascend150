@@ -770,11 +770,16 @@ let state = {
 };
 
 // Auto-calculate current day based on challenge start date (May 1, 2025)
-const CHALLENGE_START = new Date('2025-05-01T00:00:00');
+// Use UTC dates to avoid timezone shifting the day count
+const CHALLENGE_START_UTC = Date.UTC(2025, 4, 1); // Month is 0-indexed: 4 = May
 function calcCurrentDay() {
-  const now  = new Date();
-  const diff = Math.floor((now - CHALLENGE_START) / (1000 * 60 * 60 * 24));
-  return Math.min(Math.max(diff + 1, 1), TOTAL_DAYS); // clamp between 1 and 150
+  const nowUTC  = Date.UTC(
+    new Date().getFullYear(),
+    new Date().getMonth(),
+    new Date().getDate()
+  );
+  const diff = Math.floor((nowUTC - CHALLENGE_START_UTC) / (1000 * 60 * 60 * 24));
+  return Math.min(Math.max(diff + 1, 1), TOTAL_DAYS); // clamp between Day 1 and 150
 }
 
 let currentDay  = calcCurrentDay();
@@ -1106,10 +1111,9 @@ function renderDayNav() {
   const todayDay = calcCurrentDay();
   document.getElementById('navDayNum').textContent = 'Day ' + currentDay;
 
-  // Show real date for the displayed day
-  const dayDate = new Date(CHALLENGE_START);
-  dayDate.setDate(dayDate.getDate() + currentDay - 1);
-  const dateStr = dayDate.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  // Show real date for the displayed day — use UTC to avoid timezone issues
+  const dayDate = new Date(CHALLENGE_START_UTC + (currentDay - 1) * 86400000);
+  const dateStr = dayDate.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', timeZone:'UTC' });
   const isToday = currentDay === todayDay;
   document.getElementById('navDayDate').innerHTML =
     dateStr + (isToday ? ' &nbsp;<span style="color:var(--teal);font-size:0.65rem;font-weight:700;background:rgba(45,212,191,0.1);padding:2px 7px;border-radius:99px">TODAY</span>' : '');
@@ -1170,7 +1174,11 @@ function renderGoals() {
           <div class="g-prog-track"><div class="g-prog-fill" style="width:${pct}%;background:${g.color};${lockedDay?'opacity:0.3':''}"></div></div>
           <div class="g-prog-pct" style="color:${g.color}">${Math.round(pct)}%</div>
         </div>
-        ${lockedDay ? `<div style="font-size:0.7rem;color:var(--muted);margin-top:4px">Unlocks on Day ${g.startDay} · May ${g.startDay + 7}</div>` : ''}`;
+        \${lockedDay ? (() => {
+          const unlockDate = new Date(CHALLENGE_START_UTC + (g.startDay - 1) * 86400000);
+          const unlockStr  = unlockDate.toLocaleDateString('en-US', { month:'short', day:'numeric', timeZone:'UTC' });
+          return `<div style="font-size:0.7rem;color:var(--muted);margin-top:4px">Unlocks on Day \${g.startDay} · \${unlockStr}</div>`;
+        })() : ''}\`;
 
     } else if (g.type === 'weight') {
       const currentW = dayData.weight !== undefined ? dayData.weight : (state.days[currentDay-1]?.weight || g.start);
