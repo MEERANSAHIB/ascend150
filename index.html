@@ -729,6 +729,7 @@ const GOALS = [
   { id:'prayer',   icon:'🕌', title:'Masjid Prayers', type:'number',   unit:'prayers', target:300,  step:1,   xpPer:15,   color:'#2DD4BF' },
   { id:'journal',  icon:'✍️', title:'Journal',        type:'checkbox', target:100,               xpFlat:30, color:'#F472B6' },
   { id:'weight',   icon:'⚖️', title:'Weight',         type:'weight',   unit:'kg',      start:80,   goal:72,  xpPerKg:100, color:'#FB7185' },
+  { id:'gym',      icon:'💪', title:'Hit the Gym',     type:'checkbox', target:90,               xpFlat:75, color:'#FF6B6B', startDay:8 },
 ];
 
 const BADGES = [
@@ -747,6 +748,9 @@ const BADGES = [
   { id:'study100',    icon:'📚', name:'Scholar',        check: s => cumTotal('study',s) >= 100 },
   { id:'prayer50',    icon:'🕌', name:'Devoted',        check: s => cumTotal('prayer',s) >= 50 },
   { id:'journal30',   icon:'✍️', name:'Chronicler',     check: s => checkedDays('journal',s) >= 30 },
+  { id:'gym_first',    icon:'💪', name:'First Pump',      check: s => checkedDays('gym',s) >= 1 },
+  { id:'gym_30',       icon:'🏋️', name:'30 Gym Days',     check: s => checkedDays('gym',s) >= 30 },
+  { id:'gym_done',     icon:'🥇', name:'Gym Champion',    check: s => checkedDays('gym',s) >= 90 },
 ];
 
 const LEVEL_TITLES = [
@@ -778,63 +782,84 @@ let saveTimeout = null;
 
 /* ============================================================
    AUTH
+   Strategy: use a single Firebase app but point authDomain to
+   Firebase's own domain (firebaseapp.com) so Google OAuth never
+   sees github.io. We re-initialise Firebase with that domain,
+   do the full redirect flow there, and persist the session in
+   localStorage so it survives page reloads.
 ============================================================ */
+
+// Create ONE secondary app with firebaseapp.com as authDomain.
+// This is the app we use for ALL sign-in operations.
+const AUTH_APP_NAME = 'ascendAuth';
+let authApp;
+try { authApp = firebase.app(AUTH_APP_NAME); }
+catch(e) {
+  authApp = firebase.initializeApp(
+    { ...firebaseConfig, authDomain: 'ascend150-by-meeran.firebaseapp.com' },
+    AUTH_APP_NAME
+  );
+}
+const authAppAuth = authApp.auth();
+
+// Keep both auths in sync — when authApp signs in, sign main auth in too
+authAppAuth.onAuthStateChanged(user => {
+  if (user) {
+    // Sign the main auth instance in with same credential via ID token
+    user.getIdToken().then(token => {
+      const cred = firebase.auth.GoogleAuthProvider.credential(null, token);
+      // main auth: just set currentUser directly, skip re-signing in
+      currentUser = user;
+      showApp(user);
+      loadFromFirestore();
+    });
+  }
+});
+
+// Main auth state — handles already-logged-in sessions on refresh
+auth.onAuthStateChanged(user => {
+  if (user && !currentUser) {
+    currentUser = user;
+    showApp(user);
+    loadFromFirestore();
+  } else if (!user && !currentUser) {
+    // Check authApp too before showing login
+    const authAppUser = authAppAuth.currentUser;
+    if (!authAppUser) showLogin();
+  }
+});
+
+// On page load, check if we are returning from a Google redirect
+authAppAuth.getRedirectResult()
+  .then(result => {
+    if (result && result.user) {
+      // Redirect completed — user is now signed in via authAppAuth
+      // onAuthStateChanged above will fire and handle showApp
+      console.log('Redirect sign-in complete:', result.user.displayName);
+    }
+  })
+  .catch(err => {
+    // Ignore the "no pending redirect" error that fires on every normal load
+    if (err.code && err.code !== 'auth/no-auth-event') {
+      console.warn('getRedirectResult error:', err.code);
+    }
+  });
+
 function signInWithGoogle() {
-  // Pure redirect using Firebase's own firebaseapp.com domain as the authDomain.
-  // This means Google OAuth never sees the github.io domain at all.
-  // We temporarily change the auth object's domain, trigger redirect, done.
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-
-  // Re-init auth with Firebase's own domain to avoid github.io being the OAuth origin
-  const tempConfig = { ...firebaseConfig, authDomain: 'ascend150-by-meeran.firebaseapp.com' };
-  const appName = 'redirectAuth';
-  let tempApp;
-  try { tempApp = firebase.app(appName); }
-  catch(e) { tempApp = firebase.initializeApp(tempConfig, appName); }
-
-  const tempAuth = tempApp.auth();
-  // Set persistence so session survives the redirect
-  tempAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(() => {
-    return tempAuth.signInWithRedirect(provider);
-  }).catch(err => {
-    console.error('Redirect error:', err);
-  });
+  // Use authApp (firebaseapp.com domain) — already whitelisted by Google
+  authAppAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+    .then(() => authAppAuth.signInWithRedirect(provider))
+    .catch(err => console.error('Sign-in redirect error:', err));
 }
 
-// Called once on page load — handles the return from Google sign-in redirect.
-// We check BOTH the main auth and the temp auth for a redirect result.
-(function handleRedirectOnLoad() {
-  const appName = 'redirectAuth';
-  let tempApp;
-  try { tempApp = firebase.app(appName); }
-  catch(e) {
-    try {
-      tempApp = firebase.initializeApp(
-        { ...firebaseConfig, authDomain: 'ascend150-by-meeran.firebaseapp.com' },
-        appName
-      );
-    } catch(e2) { return; }
-  }
-
-  const tempAuth = tempApp.auth();
-  tempAuth.getRedirectResult().then(result => {
-    if (result && result.user) {
-      // We have a user from the redirect — sign into main auth with their credential
-      return auth.signInWithCredential(result.credential);
-    }
-  }).catch(err => {
-    // Silently ignore "no redirect" errors — they fire on every normal page load
-    if (err.code !== 'auth/no-auth-event' && err.code !== 'auth/null-user') {
-      console.warn('Redirect result error:', err.code);
-    }
-  });
-})();
-
-
 function signOut() {
-  auth.signOut();
-  document.getElementById('signoutTip').style.display = 'none';
+  Promise.all([auth.signOut(), authAppAuth.signOut()]).then(() => {
+    currentUser = null;
+    document.getElementById('signoutTip').style.display = 'none';
+    showLogin();
+  });
 }
 
 function toggleSignout() {
@@ -842,22 +867,9 @@ function toggleSignout() {
   tip.style.display = tip.style.display === 'block' ? 'none' : 'block';
 }
 
-// Hide signout when clicking elsewhere
 document.addEventListener('click', e => {
   if (!e.target.closest('#userPill') && !e.target.closest('#signoutTip')) {
     document.getElementById('signoutTip').style.display = 'none';
-  }
-});
-
-// Auth state listener — main entry point
-auth.onAuthStateChanged(user => {
-  if (user) {
-    currentUser = user;
-    showApp(user);
-    loadFromFirestore();
-  } else {
-    currentUser = null;
-    showLogin();
   }
 });
 
@@ -870,8 +882,6 @@ function showLogin() {
 function showApp(user) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display   = 'block';
-
-  // User pill
   const pill = document.getElementById('userPill');
   pill.style.display = 'flex';
   document.getElementById('userName').textContent = user.displayName?.split(' ')[0] || 'You';
@@ -879,6 +889,7 @@ function showApp(user) {
   avatar.innerHTML = user.photoURL
     ? `<img src="${user.photoURL}" alt="avatar">`
     : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700">${(user.displayName||'?')[0]}</div>`;
+  render();
 }
 
 /* ============================================================
@@ -892,14 +903,18 @@ function loadFromFirestore() {
   setSyncStatus('syncing', 'Loading…');
   userDoc().get().then(doc => {
     if (doc.exists) {
-      state = { ...state, ...doc.data() };
-      // Firestore stores nested objects fine; days is already an object
+      const remote = doc.data();
+      // Merge carefully — remote days object may be a plain object
+      state = { ...state, ...remote };
+      if (remote.days) state.days = remote.days;
     }
+    currentDay = calcCurrentDay(); // recalculate after state load
     render();
     setSyncStatus('saved', 'Synced');
   }).catch(err => {
     console.warn('Load failed, using localStorage fallback', err);
     loadLocalFallback();
+    currentDay = calcCurrentDay();
     render();
     setSyncStatus('error', 'Offline');
   });
@@ -1171,25 +1186,32 @@ function renderGoals() {
     card.appendChild(accent);
 
     if (g.type === 'checkbox') {
-      const isChecked = dayData[g.id] === true;
-      const daysHit   = checkedDays(g.id, state);
-      const pct       = Math.min(100, (daysHit / g.target) * 100);
+      const isChecked  = dayData[g.id] === true;
+      const daysHit    = checkedDays(g.id, state);
+      const pct        = Math.min(100, (daysHit / g.target) * 100);
+      const lockedDay  = g.startDay && currentDay < g.startDay;
+      const daysUntil  = g.startDay ? g.startDay - currentDay : 0;
+
       card.innerHTML += `
         <div class="goal-row">
           <div class="goal-icon-wrap">${g.icon}</div>
           <div class="goal-meta">
-            <div class="g-title">${g.title}</div>
+            <div class="g-title">${g.title}${g.startDay ? ` <span style="font-size:0.65rem;color:var(--muted);font-weight:400">starts Day ${g.startDay}</span>` : ''}</div>
             <div class="g-xp">+${g.xpFlat} XP if done · ${daysHit}/${g.target} days</div>
           </div>
-          <div class="goal-checkbox-wrap" onclick="toggleCB('${g.id}', this)">
-            <div class="custom-cb ${isChecked?'on':''}" id="cb_${g.id}" data-checked="${isChecked}">✓</div>
-            <span class="cb-label ${isChecked?'done':''}">${isChecked?'Done ✦':'Not yet'}</span>
-          </div>
+          ${lockedDay
+            ? `<div style="font-size:0.75rem;color:var(--muted);text-align:right">🔒 in ${daysUntil} day${daysUntil!==1?'s':''}</div>`
+            : `<div class="goal-checkbox-wrap" onclick="toggleCB('${g.id}', this)">
+                <div class="custom-cb ${isChecked?'on':''}" id="cb_${g.id}" data-checked="${isChecked}">✓</div>
+                <span class="cb-label ${isChecked?'done':''}">${isChecked?'Done ✦':'Not yet'}</span>
+               </div>`
+          }
         </div>
         <div class="g-prog-row">
-          <div class="g-prog-track"><div class="g-prog-fill" style="width:${pct}%;background:${g.color}"></div></div>
+          <div class="g-prog-track"><div class="g-prog-fill" style="width:${pct}%;background:${g.color};${lockedDay?'opacity:0.3':''}"></div></div>
           <div class="g-prog-pct" style="color:${g.color}">${Math.round(pct)}%</div>
-        </div>`;
+        </div>
+        ${lockedDay ? `<div style="font-size:0.7rem;color:var(--muted);margin-top:4px">Unlocks on Day ${g.startDay} · May ${g.startDay + 7}</div>` : ''}`;
 
     } else if (g.type === 'weight') {
       const currentW = dayData.weight !== undefined ? dayData.weight : (state.days[currentDay-1]?.weight || g.start);
